@@ -2,17 +2,19 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>서커스 테트리스: 그랜드 피날레 (모바일 호환)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>서커스 테트리스: 그랜드 피날레 (모바일 완벽 최적화)</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 
         body {
             margin: 0; display: flex; justify-content: center; align-items: center; 
-            height: 100vh; width: 100vw;
+            height: 100vh; height: 100dvh; /* 최신 모바일 브라우저 주소창 높이 대응 */
+            width: 100vw;
             background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
             font-family: 'Jua', sans-serif; color: white; overflow: hidden;
-            touch-action: none; /* 모바일 새로고침 방지 */
+            touch-action: none; /* 새로고침 방지 */
+            user-select: none; -webkit-user-select: none; /* 텍스트 선택 방지 */
         }
 
         .star { position: absolute; background: white; border-radius: 50%; opacity: 0.5; animation: twinkle 3s infinite; }
@@ -28,13 +30,13 @@
             margin: 20px; font-family: 'Jua'; text-align: center; width: 80%; max-width: 300px;
         }
 
-        /* 메인 컨테이너 */
+        /* 메인 컨테이너 (PC 기준) */
         #main-wrapper {
             display: flex; flex-direction: row; gap: 20px; align-items: center; justify-content: center;
             width: 100%; max-width: 1000px; padding: 10px; box-sizing: border-box;
         }
 
-        /* 왼쪽 UI (NEXT + SCORE + RANKING) */
+        /* 왼쪽 UI */
         #ui-left-top {
             display: flex; flex-direction: column; gap: 10px; width: 180px; z-index: 100;
         }
@@ -45,7 +47,6 @@
 
         /* 랭킹 스타일 */
         .rank-item { font-size: 14px; margin: 5px 0; display: flex; justify-content: space-between; }
-        .gold { color: #ffd700; } .silver { color: #c0c0c0; } .bronze { color: #cd7f32; }
 
         /* 게임 메인 컨테이너 */
         #main-container {
@@ -57,64 +58,101 @@
         #game-section { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; border-right: 2px solid #ff4d4d; }
         canvas#tetris { height: 90%; max-height: 540px; background: #000; border: 2px solid #fff; }
 
-        #control-section { width: 250px; display: flex; flex-direction: column; justify-content: space-around; align-items: center; padding: 20px; z-index: 5; box-sizing: border-box;}
+        #control-section { width: 250px; display: flex; flex-direction: column; justify-content: space-around; align-items: center; padding: 20px; box-sizing: border-box; z-index: 5;}
 
         /* 커튼 연출 */
-        .curtain {
-            position: absolute; top: 0; width: 50%; height: 100%; background: white;
-            z-index: 500; transition: transform 1.5s ease-in-out; pointer-events: none;
-        }
+        .curtain { position: absolute; top: 0; width: 50%; height: 100%; background: white; z-index: 500; transition: transform 1.5s ease-in-out; pointer-events: none; }
         #curtain-left { left: 0; transform: translateX(-100%); }
         #curtain-right { right: 0; transform: translateX(100%); }
         #main-container.game-over #curtain-left { transform: translateX(0); }
         #main-container.game-over #curtain-right { transform: translateX(0); }
 
         /* 결과 화면 */
-        #result-screen {
-            position: absolute; inset: 0; z-index: 600; display: none;
-            flex-direction: column; justify-content: center; align-items: center;
-        }
+        #result-screen { position: absolute; inset: 0; z-index: 600; display: none; flex-direction: column; justify-content: center; align-items: center; }
         #final-score-num { font-size: 80px; color: #ff4d4d; text-shadow: 2px 2px 0 #000; margin: 20px; text-align: center; }
-
-        /* 꽃가루 */
         .petal { position: absolute; z-index: 700; pointer-events: none; animation: fall linear forwards; }
         @keyframes fall { to { transform: translateY(700px) rotate(360deg); } }
 
+        /* 버튼 및 기타 UI */
         .btn { width: 100%; max-width: 180px; padding: 12px; font-size: 20px; font-family: 'Jua'; border: none; border-radius: 50px; cursor: pointer; color: white; }
         .start-btn { background: #ff4d4d; margin-bottom: 10px;}
         .reset-btn { background: #6366f1; }
         #gold-display { background: #444; padding: 10px; border-radius: 15px; font-weight: bold; border: 2px solid #666; color: #888; text-align: center; width: 100%; box-sizing: border-box;}
         #gold-display.active { background: linear-gradient(45deg, #ffd700, #b45309); border-color: white; color: #422006; }
 
-        /* 모바일 조작 키 UI (기본적으로 숨김) */
-        #mobile-controls {
-            display: none; width: 100%; max-width: 400px; margin-top: 10px;
-            flex-direction: column; gap: 10px; align-items: center;
-        }
-        .control-row { display: flex; gap: 10px; width: 100%; justify-content: center; }
-        .m-btn {
-            flex: 1; height: 60px; font-size: 24px; font-weight: bold; border-radius: 15px;
-            background: rgba(255, 255, 255, 0.2); border: 2px solid #fff; color: white;
-            cursor: pointer; display: flex; justify-content: center; align-items: center;
-        }
-        .m-btn:active { background: rgba(255, 255, 255, 0.5); }
-        .m-btn.hard { background: #ff4d4d; }
-        .m-btn.gold-btn { background: #ffd700; color: #000; border-color: #b45309; }
+        /* 모바일 조작 키 UI (PC에선 숨김) */
+        #mobile-controls { display: none; }
 
-        /* 반응형: 모바일 크기일 때 */
+        /* ========================================= */
+        /* 모바일 전용 반응형 레이아웃 (완벽 최적화) */
+        /* ========================================= */
         @media (max-width: 800px) {
-            #main-wrapper { flex-direction: column; height: 100%; overflow-y: auto; padding-top: 20px; justify-content: flex-start;}
-            #main-container { width: 95vw; height: auto; flex-direction: column; border-width: 3px; }
-            #game-section { border-right: none; border-bottom: 2px solid #ff4d4d; padding: 10px 0; }
-            canvas#tetris { height: 60vh; } /* 화면 비율에 맞게 캔버스 조정 */
-            #control-section { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 10px; }
-            #control-section > div { width: 45%; font-size: 14px;}
-            .btn { width: 45%; margin: 0; padding: 10px; font-size: 16px;}
-            #ui-left-top { width: 95vw; flex-direction: row; justify-content: space-between; }
-            .ui-box { flex: 1; padding: 5px; }
-            .pc-desc { display: none; } /* PC 설명 숨김 */
-            #mobile-controls { display: flex; } /* 모바일 버튼 표시 */
-            #start-screen h1 { font-size: 35px !important; }
+            body { padding: 5px; box-sizing: border-box; }
+            #start-screen h1 { font-size: 32px !important; margin: 10px; }
+            #player-name-input { margin: 10px; padding: 10px; font-size: 16px; }
+
+            /* 전체 래퍼: 세로 정렬 및 스크롤 금지 */
+            #main-wrapper { 
+                flex-direction: column; 
+                height: 100%; width: 100%; 
+                padding: 0; margin: 0; gap: 5px;
+                justify-content: flex-start;
+            }
+
+            /* 1. 상단 정보창: 가로 한 줄로 압축 */
+            #ui-left-top { 
+                width: 100%; flex-direction: row; gap: 5px; margin: 0; justify-content: center; 
+            }
+            .ui-box { flex: 1; padding: 5px; font-size: 10px; border-width: 2px; border-radius: 12px; margin:0; }
+            .ui-box canvas { height: 35px !important; width: auto; }
+            #score-val { font-size: 18px !important; }
+            .ui-box:nth-child(3) { display: none; } /* 랭킹 숨김 (공간 확보) */
+
+            /* 2. 메인 게임 및 스테이지 UI 컨테이너 */
+            #main-container { 
+                width: 100%; flex: 1; min-height: 0; /* 이 설정이 있어야 캔버스가 작아짐 */
+                flex-direction: column; 
+                border-width: 2px; border-radius: 15px; margin: 0;
+            }
+
+            /* 2-1. 게임 화면 캔버스 영역 */
+            #game-section { 
+                flex: 1; min-height: 0; border-right: none; border-bottom: 2px solid #ff4d4d; 
+                padding: 5px; display: flex; align-items: center; justify-content: center;
+            }
+            canvas#tetris { 
+                height: 100%; max-height: 100%; width: auto; max-width: 100%; 
+                aspect-ratio: 12 / 20; /* 찌그러짐 방지 비율 고정 */
+                object-fit: contain; 
+            }
+
+            /* 2-2. 중앙 컨트롤 정보창 (가로 한 줄 압축) */
+            #control-section { 
+                width: 100%; flex-direction: row; gap: 5px; padding: 5px;
+            }
+            #control-section > div { flex: 1; padding: 5px; font-size: 10px; margin: 0; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+            #control-section h2 { font-size: 13px; margin: 0; }
+            #control-section p { margin: 2px 0; font-size: 9px; }
+            #gold-display { font-size: 11px; padding: 0; border-width: 1px; }
+            .btn { flex: 1; max-width: none; margin: 0; padding: 5px; font-size: 14px; border-radius: 10px; }
+            .pc-desc { display: none; } 
+
+            /* 3. 모바일 조작 패드 */
+            #mobile-controls { 
+                display: flex; width: 100%; max-width: 500px; 
+                flex-direction: column; gap: 5px; margin: 0 auto; 
+                padding-bottom: env(safe-area-inset-bottom, 5px); /* 아이폰 하단 홈 바 영역 띄우기 */
+            }
+            .control-row { display: flex; gap: 5px; width: 100%; justify-content: center; }
+            .m-btn { 
+                flex: 1; height: 45px; font-size: 18px; font-weight: bold; border-radius: 10px;
+                background: rgba(255, 255, 255, 0.2); border: 2px solid #fff; color: white;
+                cursor: pointer; display: flex; justify-content: center; align-items: center;
+                touch-action: manipulation; /* 버튼 연타 시 화면 확대 완벽 차단 */
+            }
+            .m-btn:active { background: rgba(255, 255, 255, 0.5); }
+            .m-btn.hard { background: #ff4d4d; height: 40px; font-size: 15px;}
+            .m-btn.gold-btn { background: #ffd700; color: #000; border-color: #b45309; }
         }
     </style>
 </head>
@@ -142,7 +180,7 @@
         </div>
     </div>
 
-    <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+    <div style="display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%;">
         <div id="main-container">
             <div id="curtain-left" class="curtain"></div>
             <div id="curtain-right" class="curtain"></div>
@@ -158,10 +196,9 @@
             </div>
             
             <div id="control-section">
-                <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 15px; text-align: center;">
-                    <h2 id="stage-display" style="color: #ffcc00; margin: 0;">STAGE 1</h2>
-                    <p style="margin: 5px 0;">Target: <span id="target-lines">3</span></p>
-                    <p style="margin: 5px 0;">Lines: <span id="current-lines">0</span></p>
+                <div style="background: rgba(0,0,0,0.5); text-align: center;">
+                    <h2 id="stage-display" style="color: #ffcc00;">STAGE 1</h2>
+                    <p>Target: <span id="target-lines">3</span> | Lines: <span id="current-lines">0</span></p>
                 </div>
                 <div id="gold-display">GOLD (0)</div>
                 <button class="btn start-btn" id="play-pause-btn" onclick="togglePlay(); this.blur();">START</button>
@@ -193,9 +230,8 @@
     const nextCanvas = document.getElementById('next-canvas');
     const nextContext = nextCanvas.getContext('2d');
     
-    // 캔버스 크기 비율 조정
+    // 내부 좌표 스케일
     context.scale(20, 20);
-    // 넥스트 캔버스는 사이즈를 약간 줄였으므로 스케일 조정 (80 -> 60)
     nextContext.scale(15, 15);
 
     const hamsterImg = new Image();
@@ -384,12 +420,8 @@
     function drawGrid() {
         context.lineWidth = 0.05;
         context.strokeStyle = "rgba(255, 255, 255, 0.15)";
-        for (let x = 0; x <= 12; x++) {
-            context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 20); context.stroke();
-        }
-        for (let y = 0; y <= 20; y++) {
-            context.beginPath(); context.moveTo(0, y); context.lineTo(12, y); context.stroke();
-        }
+        for (let x = 0; x <= 12; x++) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 20); context.stroke(); }
+        for (let y = 0; y <= 20; y++) { context.beginPath(); context.moveTo(0, y); context.lineTo(12, y); context.stroke(); }
     }
 
     function draw() {
@@ -438,22 +470,10 @@
         });
     }
 
-    // ================= 모바일 및 PC 공통 액션 함수 =================
-    function actionLeft() {
-        if (!gameRunning) return;
-        player.pos.x--; if(collide(arena, player)) player.pos.x++;
-    }
-    function actionRight() {
-        if (!gameRunning) return;
-        player.pos.x++; if(collide(arena, player)) player.pos.x--;
-    }
-    function actionDown() {
-        if (!gameRunning) return;
-        for(let i=0; i<2; i++){ 
-            player.pos.y++; 
-            if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); break; } 
-        }
-    }
+    // ================= 액션 함수 =================
+    function actionLeft() { if (!gameRunning) return; player.pos.x--; if(collide(arena, player)) player.pos.x++; }
+    function actionRight() { if (!gameRunning) return; player.pos.x++; if(collide(arena, player)) player.pos.x--; }
+    function actionDown() { if (!gameRunning) return; for(let i=0; i<2; i++){ player.pos.y++; if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); break; } } }
     function actionRotate() {
         if (!gameRunning) return;
         const m = player.matrix;
@@ -464,28 +484,17 @@
             for(let y=0; y<m.length; ++y) for(let x=0; x<y; ++x) [m[x][y], m[y][x]] = [m[y][x], m[x][y]]; 
         }
     }
-    function actionHardDrop() {
-        if (!gameRunning) return;
-        while(!collide(arena, player)) player.pos.y++;
-        player.pos.y--; merge(arena, player); playerReset(); arenaSweep();
-    }
-    function actionGold() {
-        if (!gameRunning) return;
-        if(stage >= 4 && goldCount > 0) { 
-            goldCount--; arena.splice(-2, 2); arena.unshift(Array(12).fill(0), Array(12).fill(0)); 
-            updateUI(); playSound(200, 0.4); 
-        }
-    }
+    function actionHardDrop() { if (!gameRunning) return; while(!collide(arena, player)) player.pos.y++; player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); }
+    function actionGold() { if (!gameRunning) return; if(stage >= 4 && goldCount > 0) { goldCount--; arena.splice(-2, 2); arena.unshift(Array(12).fill(0), Array(12).fill(0)); updateUI(); playSound(200, 0.4); } }
 
-    // PC 키보드 이벤트 연결
     document.addEventListener('keydown', e => {
-        if (e.keyCode === 80) { togglePlay(); return; } // P
-        if (e.keyCode === 37) actionLeft(); // 좌
-        else if (e.keyCode === 39) actionRight(); // 우
-        else if (e.keyCode === 38) actionRotate(); // 위 (회전)
-        else if (e.keyCode === 40) actionDown(); // 아래 (2칸)
-        else if (e.keyCode === 32) actionHardDrop(); // 스페이스
-        else if (e.keyCode === 48 || e.keyCode === 96) actionGold(); // 0 키 (골드)
+        if (e.keyCode === 80) { togglePlay(); return; }
+        if (e.keyCode === 37) actionLeft();
+        else if (e.keyCode === 39) actionRight();
+        else if (e.keyCode === 38) actionRotate();
+        else if (e.keyCode === 40) actionDown();
+        else if (e.keyCode === 32) actionHardDrop();
+        else if (e.keyCode === 48 || e.keyCode === 96) actionGold();
     });
 
     updateUI();
