@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>서커스 테트리스: 그랜드 피날레 (수정본)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
+        body {
+            margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
+            font-family: 'Jua', sans-serif; color: white; overflow: hidden;
+        }
+
+        .star { position: absolute; background: white; border-radius: 50%; opacity: 0.5; animation: twinkle 3s infinite; }
+        @keyframes twinkle { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+        /* 시작 화면 */
+        #start-screen {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        #player-name-input {
+            padding: 15px; font-size: 20px; border-radius: 10px; border: none; 
+            margin: 20px; font-family: 'Jua'; text-align: center;
+        }
+
+        /* 왼쪽 상단 UI (NEXT + SCORE + RANKING) */
+        #ui-left-top {
+            position: fixed; top: 20px; left: 20px; z-index: 100;
+            display: flex; flex-direction: column; gap: 10px; width: 180px;
+        }
+        .ui-box {
+            background: rgba(0, 0, 0, 0.8); border: 3px solid #ffcc00;
+            border-radius: 20px; padding: 12px; text-align: center; backdrop-filter: blur(10px);
+        }
+
+        /* 랭킹 스타일 */
+        .rank-item { font-size: 14px; margin: 5px 0; display: flex; justify-content: space-between; }
+        .gold { color: #ffd700; } .silver { color: #c0c0c0; } .bronze { color: #cd7f32; }
+
+        /* 메인 컨테이너 */
+        #main-container {
+            display: flex; width: 900px; height: 600px;
+            background: rgba(255, 255, 255, 0.05); border: 5px solid #ff4d4d;
+            border-radius: 30px; position: relative; overflow: hidden;
+        }
+
+        #game-section { flex: 3; position: relative; display: flex; justify-content: center; align-items: center; border-right: 2px solid #ff4d4d; }
+        canvas#tetris { height: 90%; background: #000; border: 2px solid #fff; }
+
+        #control-section { flex: 2; display: flex; flex-direction: column; justify-content: space-around; align-items: center; padding: 20px; z-index: 5; }
+
+        /* 커튼 연출 */
+        .curtain {
+            position: absolute; top: 0; width: 50%; height: 100%; background: white;
+            z-index: 500; transition: transform 1.5s ease-in-out; pointer-events: none;
+        }
+        #curtain-left { left: 0; transform: translateX(-100%); }
+        #curtain-right { right: 0; transform: translateX(100%); }
+        #main-container.game-over #curtain-left { transform: translateX(0); }
+        #main-container.game-over #curtain-right { transform: translateX(0); }
+
+        /* 결과 화면 */
+        #result-screen {
+            position: absolute; inset: 0; z-index: 600; display: none;
+            flex-direction: column; justify-content: center; align-items: center;
+        }
+        #final-score-num { font-size: 80px; color: #ff4d4d; text-shadow: 2px 2px 0 #000; margin: 20px; }
+
+        /* 꽃가루 */
+        .petal { position: absolute; z-index: 700; pointer-events: none; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(700px) rotate(360deg); } }
+
+        .btn { width: 180px; padding: 12px; font-size: 20px; font-family: 'Jua'; border: none; border-radius: 50px; cursor: pointer; color: white; }
+        .start-btn { background: #ff4d4d; }
+        .reset-btn { background: #6366f1; }
+        #gold-display { background: #444; padding: 10px; border-radius: 15px; font-weight: bold; border: 2px solid #666; color: #888; text-align: center; width: 160px;}
+        #gold-display.active { background: linear-gradient(45deg, #ffd700, #b45309); border-color: white; color: #422006; }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1 style="color: #ff4d4d; font-size: 50px;">CIRCUS ENTRANCE</h1>
+    <input type="text" id="player-name-input" placeholder="이름을 입력하세요" maxlength="8">
+    <button class="btn start-btn" onclick="initGame()">입장하기</button>
+</div>
+
+<div id="ui-left-top">
+    <div class="ui-box">
+        <div style="font-size: 14px; color: #ffcc00;">NEXT</div>
+        <canvas id="next-canvas" width="80" height="80"></canvas>
+    </div>
+    <div class="ui-box">
+        <div style="font-size: 14px; color: #ffcc00;">SCORE</div>
+        <div id="score-val" style="font-size: 24px; color: #4ade80;">0</div>
+    </div>
+    <div class="ui-box">
+        <div style="font-size: 14px; color: #ffcc00; margin-bottom: 5px;">RANKING (TOP 3)</div>
+        <div id="ranking-list"></div>
+    </div>
+</div>
+
+<div id="main-container">
+    <div id="curtain-left" class="curtain"></div>
+    <div id="curtain-right" class="curtain"></div>
+    
+    <div id="result-screen">
+        <h1 style="color: #333; margin: 0;">FINAL SCORE</h1>
+        <div id="final-score-num">0</div>
+        <button class="btn reset-btn" onclick="location.reload()">AGAIN?</button>
+    </div>
+
+    <div id="game-section">
+        <canvas id="tetris" width="240" height="400"></canvas>
+    </div>
+    
+    <div id="control-section">
+        <div style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 20px; width: 80%; text-align: center;">
+            <h2 id="stage-display" style="color: #ffcc00; margin: 0;">STAGE 1</h2>
+            <p style="margin: 5px 0;">Target: <span id="target-lines">3</span></p>
+            <p style="margin: 5px 0;">Stage Lines: <span id="current-lines">0</span></p>
+        </div>
+        <div id="gold-display">GOLD ITEM (0)</div>
+        <button class="btn start-btn" id="play-pause-btn" onclick="togglePlay()">START</button>
+        <div style="font-size: 11px; color: #ccc; text-align: center;">↑:회전 | ↓:2칸 | Space:하드드랍 | 0:골드</div>
+    </div>
+</div>
+
+<script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const canvas = document.getElementById('tetris');
+    const context = canvas.getContext('2d');
+    const nextCanvas = document.getElementById('next-canvas');
+    const nextContext = nextCanvas.getContext('2d');
+    context.scale(20, 20);
+    nextContext.scale(20, 20);
+
+    let playerName = "";
+    let gameRunning = false;
+    let animReq, musicInterval;
+    let stage = 1, linesInStage = 0, goldLinesCounter = 0, goldCount = 0, currentScore = 0;
+    let dropInterval = 1000, dropCounter = 0, lastTime = 0;
+    
+    const colors = [null, '#FF5E5E', '#5EFF5E', '#5E5EFF', '#FFFF5E', '#FFB35E', '#B35EFF', '#5EFFFF', '#777777'];
+    const arena = Array.from({length: 20}, () => Array(12).fill(0));
+    const player = { pos: {x: 0, y: 0}, matrix: null, next: null };
+
+    function initGame() {
+        playerName = document.getElementById('player-name-input').value.trim() || "Guest";
+        document.getElementById('start-screen').style.display = 'none';
+        updateRankingUI();
+    }
+
+    function togglePlay() {
+        if (!gameRunning) {
+            gameRunning = true;
+            if (!player.matrix) playerReset();
+            lastTime = performance.now();
+            circusBGM();
+            update();
+            document.getElementById('play-pause-btn').innerText = "PAUSE";
+        } else {
+            gameRunning = false;
+            cancelAnimationFrame(animReq);
+            clearTimeout(musicInterval);
+            document.getElementById('play-pause-btn').innerText = "RESUME";
+        }
+    }
+
+    function playSound(freq, dur, vol=0.1, type='square') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function circusBGM() {
+        if (!gameRunning) return;
+        const now = audioCtx.currentTime;
+        [261, 329, 392, 523].forEach((f, i) => playSound(f, 0.2, 0.05));
+        musicInterval = setTimeout(circusBGM, 800);
+    }
+
+    function updateRankingUI() {
+        let ranks = JSON.parse(localStorage.getItem('circusRanks') || "[]");
+        const list = document.getElementById('ranking-list');
+        list.innerHTML = "";
+        const trophies = ['🏆', '🥈', '🥉'];
+        ranks.sort((a,b) => b.score - a.score).slice(0, 3).forEach((r, i) => {
+            list.innerHTML += `<div class="rank-item"><span>${trophies[i]} ${r.name}</span> <span>${r.score}</span></div>`;
+        });
+    }
+
+    function saveRank() {
+        let ranks = JSON.parse(localStorage.getItem('circusRanks') || "[]");
+        ranks.push({name: playerName, score: currentScore});
+        ranks.sort((a,b) => b.score - a.score);
+        localStorage.setItem('circusRanks', JSON.stringify(ranks.slice(0, 10)));
+    }
+
+    function gameOver() {
+        gameRunning = false;
+        cancelAnimationFrame(animReq);
+        clearTimeout(musicInterval);
+        saveRank();
+        document.getElementById('main-container').classList.add('game-over');
+        const now = audioCtx.currentTime;
+        [523, 659, 783, 1046].forEach((f, i) => playSound(f, 0.6, 0.15, 'sawtooth'));
+
+        for(let i=0; i<60; i++) {
+            const p = document.createElement('div');
+            p.className = 'petal';
+            p.style.left = Math.random() * 100 + '%';
+            p.style.top = '-20px';
+            p.style.width = p.style.height = (Math.random() * 8 + 5) + 'px';
+            p.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+            p.style.animationDuration = (Math.random() * 2 + 1) + 's';
+            document.getElementById('main-container').appendChild(p);
+        }
+
+        setTimeout(() => {
+            document.getElementById('result-screen').style.display = 'flex';
+            let count = 0;
+            const target = currentScore;
+            const timer = setInterval(() => {
+                count += Math.ceil(target / 40);
+                if (count >= target) { count = target; clearInterval(timer); }
+                document.getElementById('final-score-num').innerText = count;
+                playSound(1000 + (count % 200), 0.05, 0.03, 'sine');
+            }, 30);
+        }, 1500);
+    }
+
+    function createPiece(type) {
+        if (type === 'I') return [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]];
+        if (type === 'L') return [[0,2,0],[0,2,0],[0,2,2]];
+        if (type === 'J') return [[0,3,0],[0,3,0],[3,3,0]];
+        if (type === 'O') return [[4,4],[4,4]];
+        if (type === 'Z') return [[5,5,0],[0,5,5],[0,0,0]];
+        if (type === 'S') return [[0,6,6],[6,6,0],[0,0,0]];
+        if (type === 'T') return [[0,7,0],[7,7,7],[0,0,0]];
+    }
+
+    function playerReset() {
+        const pieces = 'ILJOTSZ';
+        if (!player.next) player.next = createPiece(pieces[Math.random() * pieces.length | 0]);
+        player.matrix = player.next;
+        player.next = createPiece(pieces[Math.random() * pieces.length | 0]);
+        player.pos.y = 0;
+        player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+        if (collide(arena, player)) gameOver();
+        if (stage >= 4 && Math.random() < 0.2) riseGarbage();
+    }
+
+    function riseGarbage() {
+        arena.shift();
+        const row = Array(12).fill(8);
+        row[Math.floor(Math.random() * 12)] = 0;
+        arena.push(row);
+    }
+
+    function arenaSweep() {
+        let count = 0;
+        outer: for (let y = arena.length - 1; y > 0; --y) {
+            for (let x = 0; x < arena[y].length; ++x) if (arena[y][x] === 0) continue outer;
+            arena.splice(y, 1);
+            arena.unshift(Array(12).fill(0));
+            ++y; count++;
+        }
+        if (count > 0) {
+            linesInStage += count;
+            currentScore += (count * 150) * stage;
+            if (stage >= 4) {
+                goldLinesCounter += count;
+                while (goldLinesCounter >= 15) { goldCount++; goldLinesCounter -= 15; }
+            }
+            if (linesInStage >= (3 + (stage-1)*2)) {
+                stage++; linesInStage = 0;
+                dropInterval *= 0.88;
+                playSound(1046, 0.4, 0.1, 'sawtooth');
+            }
+            updateUI();
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('stage-display').innerText = `STAGE ${stage}`;
+        document.getElementById('target-lines').innerText = 3 + (stage-1)*2;
+        document.getElementById('current-lines').innerText = linesInStage;
+        document.getElementById('score-val').innerText = currentScore;
+        const gd = document.getElementById('gold-display');
+        gd.innerText = stage < 4 ? "GOLD LOCKED" : `GOLD ITEM (${goldCount})`;
+        if(stage >= 4) gd.classList.add('active');
+    }
+
+    function collide(arena, player) {
+        const [m, o] = [player.matrix, player.pos];
+        for (let y = 0; y < m.length; ++y) {
+            for (let x = 0; x < m[y].length; ++x) {
+                if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) return true;
+            }
+        }
+        return false;
+    }
+
+    function drawGrid() {
+        context.lineWidth = 0.05;
+        context.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        for (let x = 0; x <= 12; x++) {
+            context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 20); context.stroke();
+        }
+        for (let y = 0; y <= 20; y++) {
+            context.beginPath(); context.moveTo(0, y); context.lineTo(12, y); context.stroke();
+        }
+    }
+
+    function draw() {
+        context.fillStyle = '#000'; context.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(); // 모눈종이 선 그리기
+        drawMatrix(arena, {x: 0, y: 0}, context);
+        drawMatrix(player.matrix, player.pos, context);
+        nextContext.fillStyle = '#000'; nextContext.fillRect(0, 0, 80, 80);
+        drawMatrix(player.next, {x: 1, y: 1}, nextContext);
+    }
+
+    function drawMatrix(m, o, ctx) {
+        m.forEach((row, y) => {
+            row.forEach((v, x) => {
+                if (v !== 0) {
+                    ctx.fillStyle = colors[v];
+                    ctx.fillRect(x + o.x, y + o.y, 1, 1);
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.05;
+                    ctx.strokeRect(x + o.x, y + o.y, 1, 1);
+                }
+            });
+        });
+    }
+
+    function update(time = 0) {
+        if (!gameRunning) return;
+        const dt = time - lastTime; lastTime = time;
+        dropCounter += dt;
+        if (dropCounter > dropInterval) { player.pos.y++; if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); } dropCounter = 0; }
+        draw();
+        animReq = requestAnimationFrame(update);
+    }
+
+    function merge(arena, player) {
+        player.matrix.forEach((row, y) => {
+            row.forEach((v, x) => { if(v !== 0) arena[y + player.pos.y][x + player.pos.x] = v; });
+        });
+    }
+
+    function resetGame() { location.reload(); }
+
+    document.addEventListener('keydown', e => {
+        if (!gameRunning) return;
+        if (e.keyCode === 37) { player.pos.x--; if(collide(arena, player)) player.pos.x++; } // 좌
+        else if (e.keyCode === 39) { player.pos.x++; if(collide(arena, player)) player.pos.x--; } // 우
+        else if (e.keyCode === 38) { // 회전
+            const m = player.matrix;
+            for(let y=0; y<m.length; ++y) for(let x=0; x<y; ++x) [m[x][y], m[y][x]] = [m[y][x], m[x][y]];
+            m.forEach(row => row.reverse());
+            if(collide(arena, player)) { m.forEach(row => row.reverse()); for(let y=0; y<m.length; ++y) for(let x=0; x<y; ++x) [m[x][y], m[y][x]] = [m[y][x], m[x][y]]; }
+        }
+        else if (e.keyCode === 40) { // 쓰윽쓰윽 (2칸)
+            for(let i=0; i<2; i++){ player.pos.y++; if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); break; } }
+        }
+        else if (e.keyCode === 32) { // 하드드랍
+            while(!collide(arena, player)) player.pos.y++;
+            player.pos.y--; merge(arena, player); playerReset(); arenaSweep();
+        }
+        else if (e.keyCode === 48 || e.keyCode === 96) { // 골드(0)
+            if(stage >= 4 && goldCount > 0) { goldCount--; arena.splice(-2, 2); arena.unshift(Array(12).fill(0), Array(12).fill(0)); updateUI(); playSound(200, 0.4); }
+        }
+    });
+
+    updateUI();
+</script>
+</body>
+</html>
