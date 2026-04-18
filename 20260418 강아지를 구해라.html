@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Save the Doge - Ultimate Hardcore Mode</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #87CEEB; overflow: hidden; font-family: 'Jua', sans-serif;
+            touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+        }
+        
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        #game-container canvas { display: block; width: 100%; height: 100%; }
+        
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column; align-items: center; z-index: 10;
+        }
+        
+        #stage-display {
+            background: rgba(0,0,0,0.8); color: #ffeb3b; padding: 12px 40px;
+            border-radius: 0 0 25px 25px; font-size: 28px; font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid #fff; border-top: none;
+        }
+        #ink-container {
+            width: 80%; max-width: 400px; height: 18px; background: rgba(0,0,0,0.6);
+            border: 3px solid #fff; border-radius: 10px; margin-top: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.5s;
+        }
+        #ink-bar {
+            width: 100%; height: 100%; background: linear-gradient(90deg, #4ade80, #3b82f6);
+            border-radius: 5px; transition: width 0.1s;
+        }
+        #title-container {
+            margin-top: 2vh; text-align: center; opacity: 0; transition: opacity 0.5s ease-in-out;
+            transform: translateY(-20px);
+        }
+        h1 {
+            color: white; text-shadow: 2px 2px 0 #000, 0 0 10px rgba(0,0,0,0.5);
+            font-size: 24px; padding: 10px 20px; line-height: 1.4; margin: 0;
+            background: rgba(0,0,0,0.6); border-radius: 15px; display: inline-block; border: 2px solid rgba(255,255,255,0.3);
+        }
+        
+        #timer {
+            font-size: 65px; color: #ffeb3b; text-shadow: 4px 4px 0 #000, 0 0 15px rgba(255,235,59,0.5);
+            margin-top: 10px; display: none; font-weight: bold;
+        }
+        
+        #message-box {
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; margin-top: 15vh;
+            pointer-events: auto; backdrop-filter: blur(8px); border: 3px solid #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6); min-width: 280px;
+        }
+        #message { font-size: 38px; text-shadow: 2px 2px 0 #000; margin-bottom: 25px; text-align: center; line-height: 1.4; color: white;}
+        
+        .btn {
+            padding: 15px 40px; font-size: 26px; color: white; border: 3px solid white;
+            border-radius: 25px; cursor: pointer; font-family: 'Jua'; box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            transition: transform 0.1s; width: 100%;
+        }
+        .btn:active { transform: scale(0.92); }
+        .btn-success { background: #4caf50; }
+        .btn-fail { background: #ff4d4d; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui-layer">
+        <div id="stage-display">STAGE 1</div>
+        <div id="ink-container"><div id="ink-bar"></div></div>
+        <div id="title-container">
+            <h1>드래그해서 보호막을 그리세요!<br><span style="color:#ffb7b2; font-size:18px;">(남은 잉크 주의 / 장애물 위엔 그릴 수 없음)</span></h1>
+        </div>
+        <div id="timer">5.0</div>
+        <div id="message-box">
+            <div id="message">GAME OVER</div>
+            <button id="modal-btn" class="btn btn-fail" onclick="nextAction()">다시 하기</button>
+        </div>
+    </div>
+    <script>
+        window.addEventListener('load', () => {
+            const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Vector, Events, Query } = Matter;
+            
+            const engine = Engine.create();
+            // 물리 연산 강도 최대화 (방어막 뚫림 방지)
+            engine.positionIterations = 20;
+            engine.velocityIterations = 16;
+            const world = engine.world;
+            
+            const container = document.getElementById('game-container');
+            const width = container.clientWidth || window.innerWidth;
+            const height = container.clientHeight || window.innerHeight;
+            const pixelRatio = window.devicePixelRatio || 1;
+            
+            const render = Render.create({
+                element: container, engine: engine,
+                options: { width: width, height: height, wireframes: false, background: '#87CEEB', pixelRatio: pixelRatio }
+            });
+            
+            const MAX_STAGE = 30;
+            let currentStage = 1;
+            let gameState = 'observing'; // 'observing' 상태에서도 렌더링은 완벽하게 됨
+            let gameTimer = 5.0;
+            
+            let isDrawing = false, drawnPoints = [], hasDrawn = false;
+            const INK_LINE_WIDTH = 26; 
+            let maxInk = 1500, currentInk = maxInk;
+            
+            let doge, ground, hive, barrier;
+            let bees = [], beeConstraints = [], obstacles = [];
+            
+            const terrainTypes = ['⛰️', '🪨', '🌲', '🪵'];
+            
+            // 렌더러를 가장 먼저 실행하여 초기 화면 누락 방지!
+            Render.run(render);
+            const runner = Runner.create();
+            
+            function initLevel(stage) {
+                // 기존 월드 초기화
+                Composite.clear(world, false);
+                Engine.clear(engine);
+                
+                bees = []; beeConstraints = []; obstacles = []; drawnPoints = [];
+                hasDrawn = isDrawing = false;
+                gameState = 'observing'; 
+                gameTimer = 5.0;
+                
+                maxInk = Math.max(800, 2000 - (stage * 50));
+                currentInk = maxInk;
+                updateInkUI();
+                
+                // UI 초기화
+                document.getElementById('timer').style.display = 'none';
+                document.getElementById('message-box').style.display = 'none';
+                document.getElementById('stage-display').innerText = `STAGE ${stage} / ${MAX_STAGE}`;
+                
+                const titleCont = document.getElementById('title-container');
+                const inkCont = document.getElementById('ink-container');
+                titleCont.style.opacity = '0'; titleCont.style.transform = 'translateY(-20px)';
+                inkCont.style.opacity = '0';
+                
+                const groundHeight = 80;
+                ground = Bodies.rectangle(width / 2, height - (groundHeight / 2), width, groundHeight, {
+                    isStatic: true, label: 'ground', render: { fillStyle: '#4ade80' }
+                });
+                
+                let beeCount = Math.min(80, (5 + Math.floor(stage / 1.5)) * 3);
+                
+                // [개선] 장애물 개수 엄청 늘림
+                let obstacleCount = 10 + Math.floor(stage * 3); 
+                
+                let dogeX = width * 0.2;
+                let hiveX = width * 0.8;
+                if (stage % 2 === 0) { dogeX = width * 0.8; hiveX = width * 0.2; }
+                
+                let dogeRadius = 32;
+                doge = Bodies.circle(dogeX, height - groundHeight - dogeRadius - 5, dogeRadius, {
+                    isStatic: true, label: 'doge', render: { fillStyle: 'transparent' }
+                });
+                
+                hive = Bodies.circle(hiveX, 120, 35, { 
+                    isStatic: true, label: 'hive', render: { fillStyle: 'transparent' } 
+                });
+                
+                Composite.add(world, [ground, doge, hive]);
+                
+                // [개선] 거대한 장애물 생성 및 세이프 존 알고리즘
+                const safeZoneRadius = 140; // 강아지와 벌집 주변 여백
+                
+                for(let i=0; i < obstacleCount; i++) {
+                    // 크기를 거대하게 (최소 80 ~ 최대 180)
+                    let obsSize = 80 + Math.random() * 100; 
+                    
+                    let obsX, obsY;
+                    let validPos = false;
+                    let attempts = 0;
+                    
+                    // 강아지와 벌집을 가리지 않도록 위치 추첨
+                    while(!validPos && attempts < 50) {
+                        obsX = obsSize + Math.random() * (width - obsSize * 2);
+                        // 바닥부터 하늘 중간까지 넓게 분포
+                        obsY = 100 + Math.random() * (height - groundHeight - 150);
+                        
+                        let distToDoge = Vector.magnitude(Vector.sub({x: obsX, y: obsY}, doge.position));
+                        let distToHive = Vector.magnitude(Vector.sub({x: obsX, y: obsY}, hive.position));
+                        
+                        if (distToDoge > safeZoneRadius && distToHive > safeZoneRadius) {
+                            validPos = true;
+                        }
+                        attempts++;
+                    }
+                    
+                    if (validPos) {
+                        let obs = Bodies.circle(obsX, obsY, obsSize / 2, {
+                            isStatic: true, label: 'obstacle',
+                            plugin: { emoji: terrainTypes[Math.floor(Math.random() * terrainTypes.length)], size: obsSize },
+                            render: { fillStyle: 'transparent' }
+                        });
+                        obstacles.push(obs);
+                        Composite.add(world, obs);
+                    }
+                }
+                
+                // 벌 생성
+                for (let i = 0; i < beeCount; i++) {
+                    let bee = Bodies.circle(hive.position.x + (Math.random()*80-40), hive.position.y + 50, 10, {
+                        restitution: 0.8, friction: 0.1, density: 0.001, label: 'bee', render: { fillStyle: 'transparent' }
+                    });
+                    let tether = Constraint.create({ bodyA: hive, bodyB: bee, stiffness: 0.005, render: { visible: false } });
+                    bees.push(bee); beeConstraints.push(tether);
+                    Composite.add(world, [bee, tether]);
+                }
+
+                // 뷰포트 강제 고정
+                Render.lookAt(render, { min: { x: 0, y: 0 }, max: { x: width, y: height } });
+                
+                // 초기 화면이 바로 나타나도록 물리 엔진을 수동으로 살짝 돌려줌
+                for(let i = 0; i < 5; i++) Engine.update(engine, 1000/60);
+                
+                setTimeout(() => {
+                    gameState = 'waiting';
+                    titleCont.style.opacity = '1';
+                    titleCont.style.transform = 'translateY(0)';
+                    inkCont.style.opacity = '1';
+                }, 1000); // 1초 대기 후 그리기 허용
+            }
+            
+            function updateInkUI() {
+                const inkBar = document.getElementById('ink-bar');
+                const percent = Math.max(0, (currentInk / maxInk) * 100);
+                inkBar.style.width = percent + '%';
+                inkBar.style.background = percent < 30 ? '#ff4d4d' : 'linear-gradient(90deg, #4ade80, #3b82f6)';
+            }
+            
+            function getPos(e) { 
+                const rect = render.canvas.getBoundingClientRect();
+                const scaleX = render.canvas.width / rect.width;
+                const scaleY = render.canvas.height / rect.height;
+                let clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY }; 
+            }
+            
+            // 그리기 로직
+            window.addEventListener('pointerdown', (e) => {
+                if (hasDrawn || gameState !== 'waiting' || e.target.tagName === 'BUTTON') return;
+                let pos = getPos(e);
+                if (Query.point(obstacles, pos).length > 0) return;
+                isDrawing = true; drawnPoints = [pos];
+            });
+            
+            window.addEventListener('pointermove', (e) => {
+                if (!isDrawing) return;
+                e.preventDefault();
+                let currentPoint = getPos(e);
+                
+                if (Query.point(obstacles, currentPoint).length > 0) {
+                    finishDrawing(); return;
+                }
+                let lastPoint = drawnPoints[drawnPoints.length - 1];
+                let dist = Vector.magnitude(Vector.sub(currentPoint, lastPoint));
+                
+                if (dist > 8) {
+                    currentInk -= dist;
+                    updateInkUI();
+                    
+                    if (currentInk <= 0) {
+                        drawnPoints.push(currentPoint);
+                        finishDrawing();
+                        return;
+                    }
+                    drawnPoints.push(currentPoint);
+                }
+            });
+            
+            window.addEventListener('pointerup', () => { if (isDrawing) finishDrawing(); });
+            
+            function finishDrawing() {
+                isDrawing = false;
+                if (drawnPoints.length > 5) {
+                    hasDrawn = true;
+                    document.getElementById('title-container').style.opacity = '0';
+                    createInkBarrier(drawnPoints);
+                    setTimeout(startBeesAttack, 400);
+                } else {
+                    drawnPoints = [];
+                    currentInk = maxInk;
+                    updateInkUI();
+                }
+            }
+            
+            function createInkBarrier(points) {
+                let parts = [];
+                for (let i = 0; i < points.length - 1; i++) {
+                    let p1 = points[i], p2 = points[i+1];
+                    let dist = Math.max(1, Vector.magnitude(Vector.sub(p2, p1)));
+                    let mid = Vector.add(p1, Vector.mult(Vector.sub(p2, p1), 0.5));
+                    
+                    parts.push(Bodies.rectangle(mid.x, mid.y, dist + 10, INK_LINE_WIDTH, {
+                        angle: Vector.angle(p1, p2), render: { fillStyle: '#333' }
+                    }));
+                }
+                barrier = Body.create({
+                    parts: parts, friction: 1.0, restitution: 0.1, density: 0.9, label: 'barrier'
+                });
+                Composite.add(world, barrier);
+            }
+            
+            function startBeesAttack() {
+                if (gameState !== 'waiting') return;
+                gameState = 'playing';
+                document.getElementById('timer').style.display = 'block';
+                beeConstraints.forEach(c => Composite.remove(world, c));
+            }
+            
+            // 벌의 움직임 제어
+            Events.on(engine, 'beforeUpdate', function() {
+                if (!doge || !hive) return;
+                
+                if (gameState === 'observing' || gameState === 'waiting') {
+                    // 대기 중: 공격적으로 윙윙거리는 연출
+                    bees.forEach(bee => { 
+                        if(bee) Body.applyForce(bee, bee.position, { 
+                            x: (Math.random()-0.5) * 0.0008, 
+                            y: (Math.random()-0.5) * 0.0008 - 0.0002 
+                        }); 
+                    });
+                } else if (gameState === 'playing') {
+                    gameTimer -= (1000 / 60) / 1000;
+                    document.getElementById('timer').innerText = Math.max(0, gameTimer).toFixed(1);
+                    if (gameTimer <= 0) gameOver(true);
+                    
+                    let forceMagnitude = 0.0003 + (currentStage * 0.00002);
+                    bees.forEach(bee => {
+                        if(!bee) return;
+                        let force = Vector.normalise(Vector.sub(doge.position, bee.position));
+                        force = Vector.mult(force, forceMagnitude);
+                        force.y -= 0.0001; 
+                        Body.applyForce(bee, bee.position, force);
+                    });
+                }
+            });
+            
+            Events.on(engine, 'collisionStart', function(event) {
+                event.pairs.forEach(pair => {
+                    const labels = [pair.bodyA.label, pair.bodyB.label];
+                    if (labels.includes('doge') && labels.includes('bee')) gameOver(false);
+                });
+            });
+            
+            function gameOver(isWin) {
+                if (gameState !== 'playing') return;
+                gameState = isWin ? 'won' : 'over';
+                
+                const msgBox = document.getElementById('message-box');
+                const msgText = document.getElementById('message');
+                const btn = document.getElementById('modal-btn');
+                
+                msgBox.style.display = 'flex';
+                if (isWin) {
+                    if (currentStage >= MAX_STAGE) {
+                        msgText.innerHTML = "🏆 게임 마스터 🏆<br>완벽하게 지켰습니다!"; msgText.style.color = "#ffd700"; btn.innerText = "처음부터 다시"; btn.className = "btn btn-success";
+                    } else {
+                        msgText.innerHTML = `STAGE ${currentStage}<br>클리어! 🎉`; msgText.style.color = "#4ade80"; btn.innerText = "다음 스테이지"; btn.className = "btn btn-success";
+                    }
+                } else {
+                    msgText.innerHTML = "도지가 당했습니다!<br>😭"; msgText.style.color = "#ff4d4d"; btn.innerText = "다시 도전"; btn.className = "btn btn-fail";
+                }
+            }
+            
+            window.nextAction = function() {
+                if (gameState === 'won') {
+                    if (currentStage >= MAX_STAGE) currentStage = 1; else currentStage++;
+                }
+                initLevel(currentStage);
+            };
+            
+            const emojiFont = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", sans-serif';
+            Events.on(render, 'afterRender', function() {
+                if (!render.context || !doge || !hive || !doge.position || !hive.position) return;
+                const ctx = render.context;
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                
+                // 장애물 렌더링
+                obstacles.forEach(obs => {
+                    if (!obs || !obs.position || !obs.plugin || !obs.plugin.emoji) return;
+                    ctx.save(); ctx.translate(obs.position.x, obs.position.y); ctx.rotate(obs.angle);
+                    ctx.font = obs.plugin.size + "px " + emojiFont; ctx.fillText(obs.plugin.emoji, 0, 5);
+                    
+                    // 그리기 불가 영역 빨간 원 표시
+                    ctx.fillStyle = "rgba(255, 0, 0, 0.15)";
+                    ctx.beginPath(); ctx.arc(0, 0, obs.circleRadius, 0, 2*Math.PI); ctx.fill();
+                    ctx.restore();
+                });
+                
+                // 잉크 선 렌더링
+                if (isDrawing && drawnPoints && drawnPoints.length > 0) {
+                    ctx.beginPath(); ctx.moveTo(drawnPoints[0].x, drawnPoints[0].y);
+                    for (let i = 1; i < drawnPoints.length; i++) {
+                        if(drawnPoints[i]) ctx.lineTo(drawnPoints[i].x, drawnPoints[i].y);
+                    }
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = INK_LINE_WIDTH; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+                }
+                
+                // 강아지
+                ctx.save(); ctx.translate(doge.position.x, doge.position.y);
+                if (gameState === 'observing' || gameState === 'waiting') ctx.rotate(doge.angle + Math.sin(Date.now() * 0.01) * 0.25);
+                else ctx.rotate(doge.angle);
+                ctx.font = "64px " + emojiFont; ctx.fillText("🐶", 0, 4); ctx.restore();
+                
+                // 벌집
+                ctx.save(); ctx.font = "70px " + emojiFont; ctx.fillText("🍯", hive.position.x, hive.position.y); ctx.restore();
+                
+                // 벌
+                bees.forEach(b => {
+                    if(!b || !b.position || !b.velocity) return;
+                    ctx.save(); ctx.translate(b.position.x, b.position.y); ctx.rotate(Math.atan2(b.velocity.y, b.velocity.x));
+                    ctx.font = "26px " + emojiFont; ctx.fillText("🐝", 0, 2); ctx.restore();
+                });
+            });
+            
+            // 루프 시작 및 레벨 세팅
+            Runner.run(runner, engine);
+            initLevel(currentStage);
+        });
+    </script>
+</body>
+</html>
