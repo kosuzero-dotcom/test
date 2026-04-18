@@ -79,3 +79,476 @@
             border-radius: 15px; padding: 10px; text-align: center;
             box-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
         }
+
+        .rank-item { font-size: 14px; margin: 5px 0; display: flex; justify-content: space-between; }
+        .gold { color: #ffd700; } .silver { color: #c0c0c0; } .bronze { color: #cd7f32; }
+
+        /* 게임 섹션 */
+        #game-section { 
+            flex: 1; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; position: relative;
+        }
+        
+        canvas#tetris { 
+            height: 70vh; max-height: 600px; 
+            background: #000; border: 2px solid #fff; 
+            box-shadow: 0 0 15px rgba(255,255,255,0.2);
+            border-radius: 5px;
+        }
+
+        /* 우측 컨트롤 / 정보 섹션 */
+        #info-section {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            padding: 15px; width: 200px; border-left: 2px solid rgba(255, 77, 77, 0.5);
+            background: rgba(0,0,0,0.3); gap: 15px;
+        }
+
+        /* 커튼 연출 */
+        .curtain {
+            position: absolute; top: 0; width: 50%; height: 100%; background: #fff;
+            z-index: 500; transition: transform 1.5s ease-in-out; pointer-events: none;
+            box-shadow: 0 0 30px #fff;
+        }
+        #curtain-left { left: 0; transform: translateX(-100%); }
+        #curtain-right { right: 0; transform: translateX(100%); }
+        #main-container.game-over #curtain-left { transform: translateX(0); }
+        #main-container.game-over #curtain-right { transform: translateX(0); }
+
+        #final-score-num { font-size: 80px; color: var(--neon-red); text-shadow: 3px 3px 0 #000, 0 0 20px var(--neon-red); margin: 20px; }
+
+        /* 버튼 공통 */
+        .btn { 
+            width: 100%; padding: 12px; font-size: 18px; font-family: 'Jua'; 
+            border: none; border-radius: 25px; cursor: pointer; color: white; 
+            text-transform: uppercase; transition: transform 0.1s, box-shadow 0.2s;
+        }
+        .btn:active { transform: scale(0.95); }
+        .start-btn { background: linear-gradient(45deg, #ff4d4d, #b91c1c); box-shadow: 0 4px 15px rgba(255,77,77,0.5); }
+        .reset-btn { background: linear-gradient(45deg, #6366f1, #4338ca); width: 200px;}
+        
+        #gold-display { 
+            background: #222; padding: 10px; border-radius: 15px; font-weight: bold; 
+            border: 2px solid #555; color: #888; text-align: center; width: 90%;
+            transition: all 0.3s;
+        }
+        #gold-display.active { 
+            background: linear-gradient(45deg, #ffd700, #b45309); 
+            border-color: #fff; color: #fff; text-shadow: 1px 1px 2px #000;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+        }
+
+        /* 모바일 터치 컨트롤 (가상 조이패드) */
+        #mobile-controls {
+            display: none; width: 100%; padding: 10px; box-sizing: border-box;
+            grid-template-columns: repeat(3, 1fr); gap: 8px;
+            background: rgba(0,0,0,0.5); border-top: 2px solid var(--neon-red);
+        }
+        .ctrl-btn {
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 12px; color: white; font-size: 24px; padding: 15px 0;
+            display: flex; justify-content: center; align-items: center;
+            user-select: none; font-family: 'Jua';
+        }
+        .ctrl-btn:active { background: rgba(255, 255, 255, 0.3); }
+        .ctrl-gold { grid-column: span 3; background: rgba(255, 215, 0, 0.2); border-color: var(--neon-gold); color: var(--neon-gold); font-size: 18px; }
+
+        /* 반응형 모바일 UI */
+        @media (max-width: 768px) {
+            #main-container { flex-direction: column; border-radius: 0; border: none; max-height: none; }
+            #ui-panel { flex-direction: row; width: auto; border-right: none; border-bottom: 1px solid rgba(255,77,77,0.3); padding: 5px; gap: 5px; justify-content: space-between;}
+            .ui-box { padding: 5px; flex: 1; font-size: 12px; }
+            #info-section { display: none; } /* 모바일에서는 우측 패널 숨김 (공간 확보) */
+            canvas#tetris { height: 50vh; margin: 10px 0; }
+            #mobile-controls { display: grid; }
+            h1.title { font-size: 35px; }
+            .desk-only { display: none; }
+        }
+
+        /* 꽃가루 */
+        .petal { position: absolute; z-index: 700; pointer-events: none; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1 class="title">CIRCUS ENTRANCE</h1>
+    <input type="text" id="player-name-input" placeholder="이름을 입력하세요" maxlength="8">
+    <button class="btn start-btn" style="width:200px;" onclick="initGame()">입장하기</button>
+</div>
+
+<div id="main-container">
+    <div id="curtain-left" class="curtain"></div>
+    <div id="curtain-right" class="curtain"></div>
+    
+    <div id="result-screen">
+        <h1 style="color: #fff; margin: 0; text-shadow: 0 0 10px #000;">FINAL SCORE</h1>
+        <div id="final-score-num">0</div>
+        <button class="btn reset-btn" onclick="location.reload()">AGAIN?</button>
+    </div>
+
+    <div id="ui-panel">
+        <div class="ui-box">
+            <div style="color: var(--neon-gold);">NEXT</div>
+            <canvas id="next-canvas" width="60" height="60" style="width: 100%; max-width: 60px;"></canvas>
+        </div>
+        <div class="ui-box">
+            <div style="color: var(--neon-gold);">SCORE</div>
+            <div id="score-val" style="font-size: 20px; color: var(--neon-green);">0</div>
+        </div>
+        <div class="ui-box desk-only">
+            <div style="color: var(--neon-gold); margin-bottom: 5px;">RANKING (TOP 3)</div>
+            <div id="ranking-list"></div>
+        </div>
+    </div>
+
+    <div id="game-section">
+        <div style="width: 90%; display: flex; justify-content: space-between; color: white; margin-bottom: 5px; font-size: 14px;" class="mobile-only">
+            <span id="m-stage-display" style="color: var(--neon-gold);">STAGE 1</span>
+            <span>Lines: <span id="m-current-lines">0</span> / <span id="m-target-lines">3</span></span>
+        </div>
+
+        <canvas id="tetris" width="240" height="400"></canvas>
+        
+        <div id="mobile-controls">
+            <div class="ctrl-btn" onpointerdown="actionLeft()">⬅️</div>
+            <div class="ctrl-btn" onpointerdown="actionRotate()">🔄</div>
+            <div class="ctrl-btn" onpointerdown="actionRight()">➡️</div>
+            
+            <div class="ctrl-btn" onpointerdown="actionSoftDrop()">⬇️ (2칸)</div>
+            <div class="ctrl-btn" onpointerdown="actionHardDrop()" style="grid-column: span 2; background: rgba(255,77,77,0.2);">⏬ 하드드랍</div>
+            
+            <div class="ctrl-btn ctrl-gold" id="m-gold-btn" onpointerdown="actionGold()">🌟 GOLD ITEM (0) 🌟</div>
+        </div>
+    </div>
+    
+    <div id="info-section" class="desk-only">
+        <div style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 15px; width: 100%; text-align: center; box-sizing: border-box;">
+            <h2 id="stage-display" style="color: var(--neon-gold); margin: 0 0 10px 0;">STAGE 1</h2>
+            <p style="margin: 5px 0;">Target: <span id="target-lines">3</span></p>
+            <p style="margin: 5px 0;">Stage Lines: <span id="current-lines">0</span></p>
+        </div>
+        <div id="gold-display">GOLD ITEM (0)</div>
+        <button class="btn start-btn" id="play-pause-btn" onclick="togglePlay()">START</button>
+        <div style="font-size: 12px; color: #aaa; text-align: center; line-height: 1.6;">
+            [PC 조작키]<br>↑: 회전 | ↓: 2칸 내리기<br>Space: 하드드랍 | 0: 골드
+        </div>
+    </div>
+</div>
+
+<script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const canvas = document.getElementById('tetris');
+    const context = canvas.getContext('2d');
+    const nextCanvas = document.getElementById('next-canvas');
+    const nextContext = nextCanvas.getContext('2d');
+    
+    context.scale(20, 20);
+    // Next 캔버스 크기 조정 (80->60 픽셀 기반)
+    nextContext.scale(15, 15);
+
+    let playerName = "";
+    let gameRunning = false;
+    let animReq, musicInterval;
+    let stage = 1, linesInStage = 0, goldLinesCounter = 0, goldCount = 0, currentScore = 0;
+    let dropInterval = 1000, dropCounter = 0, lastTime = 0;
+    
+    const colors = [null, '#FF5E5E', '#5EFF5E', '#5E5EFF', '#FFFF5E', '#FFB35E', '#B35EFF', '#5EFFFF', '#777777'];
+    const arena = Array.from({length: 20}, () => Array(12).fill(0));
+    const player = { pos: {x: 0, y: 0}, matrix: null, next: null };
+
+    // 화면 크기에 따른 모바일 체크
+    const isMobile = () => window.innerWidth <= 768;
+
+    function initGame() {
+        playerName = document.getElementById('player-name-input').value.trim() || "Guest";
+        document.getElementById('start-screen').style.display = 'none';
+        updateRankingUI();
+        
+        // 모바일일 경우 바로 시작
+        if(isMobile()) {
+            setTimeout(togglePlay, 500);
+        }
+    }
+
+    function togglePlay() {
+        if (!gameRunning) {
+            // 오디오 컨텍스트 활성화 (모바일 정책 대응)
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            
+            gameRunning = true;
+            if (!player.matrix) playerReset();
+            lastTime = performance.now();
+            circusBGM();
+            update();
+            const btn = document.getElementById('play-pause-btn');
+            if(btn) btn.innerText = "PAUSE";
+        } else {
+            gameRunning = false;
+            cancelAnimationFrame(animReq);
+            clearTimeout(musicInterval);
+            const btn = document.getElementById('play-pause-btn');
+            if(btn) btn.innerText = "RESUME";
+        }
+    }
+
+    function playSound(freq, dur, vol=0.1, type='square') {
+        if(audioCtx.state === 'suspended') return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function circusBGM() {
+        if (!gameRunning) return;
+        const now = audioCtx.currentTime;
+        [261, 329, 392, 523].forEach((f, i) => playSound(f, 0.2, 0.03));
+        musicInterval = setTimeout(circusBGM, 800);
+    }
+
+    function updateRankingUI() {
+        let ranks = JSON.parse(localStorage.getItem('circusRanks') || "[]");
+        const list = document.getElementById('ranking-list');
+        if(!list) return;
+        list.innerHTML = "";
+        const trophies = ['🏆', '🥈', '🥉'];
+        ranks.sort((a,b) => b.score - a.score).slice(0, 3).forEach((r, i) => {
+            list.innerHTML += `<div class="rank-item"><span>${trophies[i]} ${r.name}</span> <span style="color:var(--neon-green)">${r.score}</span></div>`;
+        });
+    }
+
+    function saveRank() {
+        let ranks = JSON.parse(localStorage.getItem('circusRanks') || "[]");
+        ranks.push({name: playerName, score: currentScore});
+        ranks.sort((a,b) => b.score - a.score);
+        localStorage.setItem('circusRanks', JSON.stringify(ranks.slice(0, 10)));
+    }
+
+    function gameOver() {
+        gameRunning = false;
+        cancelAnimationFrame(animReq);
+        clearTimeout(musicInterval);
+        saveRank();
+        document.getElementById('main-container').classList.add('game-over');
+        [523, 659, 783, 1046].forEach((f, i) => playSound(f, 0.6, 0.1, 'sawtooth'));
+
+        for(let i=0; i<60; i++) {
+            const p = document.createElement('div');
+            p.className = 'petal';
+            p.style.left = Math.random() * 100 + '%';
+            p.style.top = '-20px';
+            p.style.width = p.style.height = (Math.random() * 8 + 5) + 'px';
+            p.style.backgroundColor = `hsl(${Math.random() * 360}, 80%, 60%)`;
+            p.style.animationDuration = (Math.random() * 2 + 1.5) + 's';
+            document.getElementById('main-container').appendChild(p);
+        }
+
+        setTimeout(() => {
+            document.getElementById('result-screen').style.display = 'flex';
+            let count = 0;
+            const target = currentScore;
+            if(target === 0) return;
+            const timer = setInterval(() => {
+                count += Math.ceil(target / 40) || 1;
+                if (count >= target) { count = target; clearInterval(timer); }
+                document.getElementById('final-score-num').innerText = count;
+                playSound(1000 + (count % 200), 0.05, 0.03, 'sine');
+            }, 30);
+        }, 1500);
+    }
+
+    function createPiece(type) {
+        if (type === 'I') return [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]];
+        if (type === 'L') return [[0,2,0],[0,2,0],[0,2,2]];
+        if (type === 'J') return [[0,3,0],[0,3,0],[3,3,0]];
+        if (type === 'O') return [[4,4],[4,4]];
+        if (type === 'Z') return [[5,5,0],[0,5,5],[0,0,0]];
+        if (type === 'S') return [[0,6,6],[6,6,0],[0,0,0]];
+        if (type === 'T') return [[0,7,0],[7,7,7],[0,0,0]];
+    }
+
+    function playerReset() {
+        const pieces = 'ILJOTSZ';
+        if (!player.next) player.next = createPiece(pieces[Math.random() * pieces.length | 0]);
+        player.matrix = player.next;
+        player.next = createPiece(pieces[Math.random() * pieces.length | 0]);
+        player.pos.y = 0;
+        player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+        if (collide(arena, player)) gameOver();
+        if (stage >= 4 && Math.random() < 0.2) riseGarbage();
+    }
+
+    function riseGarbage() {
+        arena.shift();
+        const row = Array(12).fill(8);
+        row[Math.floor(Math.random() * 12)] = 0;
+        arena.push(row);
+    }
+
+    function arenaSweep() {
+        let count = 0;
+        outer: for (let y = arena.length - 1; y > 0; --y) {
+            for (let x = 0; x < arena[y].length; ++x) if (arena[y][x] === 0) continue outer;
+            arena.splice(y, 1);
+            arena.unshift(Array(12).fill(0));
+            ++y; count++;
+        }
+        if (count > 0) {
+            linesInStage += count;
+            currentScore += (count * 150) * stage;
+            if (stage >= 4) {
+                goldLinesCounter += count;
+                while (goldLinesCounter >= 15) { goldCount++; goldLinesCounter -= 15; }
+            }
+            if (linesInStage >= (3 + (stage-1)*2)) {
+                stage++; linesInStage = 0;
+                dropInterval *= 0.88;
+                playSound(1046, 0.4, 0.1, 'sawtooth');
+            }
+            updateUI();
+        }
+    }
+
+    function updateUI() {
+        const target = 3 + (stage-1)*2;
+        // PC UI
+        document.getElementById('stage-display').innerText = `STAGE ${stage}`;
+        document.getElementById('target-lines').innerText = target;
+        document.getElementById('current-lines').innerText = linesInStage;
+        
+        // Mobile UI
+        const mStage = document.getElementById('m-stage-display');
+        if(mStage) mStage.innerText = `STAGE ${stage}`;
+        const mTarget = document.getElementById('m-target-lines');
+        if(mTarget) mTarget.innerText = target;
+        const mCurrent = document.getElementById('m-current-lines');
+        if(mCurrent) mCurrent.innerText = linesInStage;
+
+        document.getElementById('score-val').innerText = currentScore;
+        
+        // Gold UI Update
+        const gd = document.getElementById('gold-display');
+        const mgd = document.getElementById('m-gold-btn');
+        const goldText = stage < 4 ? "GOLD LOCKED" : `🌟 GOLD ITEM (${goldCount}) 🌟`;
+        
+        gd.innerText = goldText;
+        if(mgd) mgd.innerText = goldText;
+
+        if(stage >= 4) {
+            gd.classList.add('active');
+            if(mgd) mgd.style.background = 'linear-gradient(45deg, #ffd700, #b45309)';
+        }
+    }
+
+    function collide(arena, player) {
+        const [m, o] = [player.matrix, player.pos];
+        for (let y = 0; y < m.length; ++y) {
+            for (let x = 0; x < m[y].length; ++x) {
+                if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) return true;
+            }
+        }
+        return false;
+    }
+
+    function drawGrid() {
+        context.lineWidth = 0.05;
+        context.strokeStyle = "rgba(255, 255, 255, 0.1)";
+        for (let x = 0; x <= 12; x++) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 20); context.stroke(); }
+        for (let y = 0; y <= 20; y++) { context.beginPath(); context.moveTo(0, y); context.lineTo(12, y); context.stroke(); }
+    }
+
+    function draw() {
+        context.fillStyle = '#000'; context.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid(); 
+        drawMatrix(arena, {x: 0, y: 0}, context);
+        drawMatrix(player.matrix, player.pos, context);
+        
+        nextContext.fillStyle = 'rgba(0,0,0,0)'; nextContext.clearRect(0, 0, 60, 60);
+        drawMatrix(player.next, {x: 0.5, y: 0.5}, nextContext);
+    }
+
+    function drawMatrix(m, o, ctx) {
+        if(!m) return;
+        m.forEach((row, y) => {
+            row.forEach((v, x) => {
+                if (v !== 0) {
+                    ctx.fillStyle = colors[v];
+                    ctx.fillRect(x + o.x, y + o.y, 1, 1);
+                    ctx.strokeStyle = '#222'; ctx.lineWidth = 0.08;
+                    ctx.strokeRect(x + o.x, y + o.y, 1, 1);
+                    
+                    // 하이라이트 효과
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.fillRect(x + o.x, y + o.y, 1, 0.2);
+                }
+            });
+        });
+    }
+
+    function update(time = 0) {
+        if (!gameRunning) return;
+        const dt = time - lastTime; lastTime = time;
+        dropCounter += dt;
+        if (dropCounter > dropInterval) { 
+            player.pos.y++; 
+            if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); } 
+            dropCounter = 0; 
+        }
+        draw();
+        animReq = requestAnimationFrame(update);
+    }
+
+    function merge(arena, player) {
+        player.matrix.forEach((row, y) => {
+            row.forEach((v, x) => { if(v !== 0) arena[y + player.pos.y][x + player.pos.x] = v; });
+        });
+    }
+
+    // --- Action Controls (Keyboard & Touch) ---
+    function actionLeft() { if(!gameRunning) return; player.pos.x--; if(collide(arena, player)) player.pos.x++; draw(); }
+    function actionRight() { if(!gameRunning) return; player.pos.x++; if(collide(arena, player)) player.pos.x--; draw(); }
+    function actionRotate() {
+        if(!gameRunning) return;
+        const m = player.matrix;
+        for(let y=0; y<m.length; ++y) for(let x=0; x<y; ++x) [m[x][y], m[y][x]] = [m[y][x], m[x][y]];
+        m.forEach(row => row.reverse());
+        if(collide(arena, player)) { m.forEach(row => row.reverse()); for(let y=0; y<m.length; ++y) for(let x=0; x<y; ++x) [m[x][y], m[y][x]] = [m[y][x], m[x][y]]; }
+        draw();
+    }
+    function actionSoftDrop() {
+        if(!gameRunning) return;
+        for(let i=0; i<2; i++){ player.pos.y++; if(collide(arena, player)){ player.pos.y--; merge(arena, player); playerReset(); arenaSweep(); break; } }
+        dropCounter = 0; draw();
+    }
+    function actionHardDrop() {
+        if(!gameRunning) return;
+        while(!collide(arena, player)) player.pos.y++;
+        player.pos.y--; merge(arena, player); playerReset(); arenaSweep();
+        dropCounter = 0; draw();
+    }
+    function actionGold() {
+        if(!gameRunning) return;
+        if(stage >= 4 && goldCount > 0) { 
+            goldCount--; arena.splice(-2, 2); arena.unshift(Array(12).fill(0), Array(12).fill(0)); 
+            updateUI(); playSound(200, 0.4); draw();
+        }
+    }
+
+    document.addEventListener('keydown', e => {
+        if (!gameRunning) return;
+        if (e.keyCode === 37) { actionLeft(); e.preventDefault(); }
+        else if (e.keyCode === 39) { actionRight(); e.preventDefault(); }
+        else if (e.keyCode === 38) { actionRotate(); e.preventDefault(); }
+        else if (e.keyCode === 40) { actionSoftDrop(); e.preventDefault(); }
+        else if (e.keyCode === 32) { actionHardDrop(); e.preventDefault(); }
+        else if (e.keyCode === 48 || e.keyCode === 96) { actionGold(); e.preventDefault(); }
+    });
+
+    updateUI();
+</script>
+</body>
+</html>
